@@ -2,14 +2,10 @@
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace Passwordium_api.Swagger
-{
-    public class ConfigureSwaggerOptions : IConfigureOptions<SwaggerGenOptions>
-    {
-        public void Configure(SwaggerGenOptions options)
-        {
-            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-            {
+namespace Passwordium_api.Swagger {
+    public class ConfigureSwaggerOptions : IConfigureOptions<SwaggerGenOptions> {
+        public void Configure(SwaggerGenOptions options) {
+            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme {
                 In = ParameterLocation.Header,
                 Description = "Provide valid token",
                 Name = "Authorization",

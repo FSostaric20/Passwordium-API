@@ -1,68 +1,53 @@
-﻿using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Passwordium_api.Data;
 using Passwordium_api.Model.Requests;
 using Passwordium_api.Model.Responses;
 using Passwordium_api.Services;
+using System.Security.Cryptography;
+using System.Text;
 
-namespace Passwordium_api.Controllers
-{
+namespace Passwordium_api.Controllers {
     [Route("api/[controller]")]
     [ApiController]
-    public class UsersController : ControllerBase
-    {
+    public class UsersController : ControllerBase {
         private readonly UserService _userService;
         private readonly DatabaseContext _context;
         private readonly TokenService _tokenService;
         private readonly HashService _hashService;
 
-        public UsersController(UserService userService, DatabaseContext context, TokenService tokenService, HashService hashService)
-        {
+        public UsersController(UserService userService, DatabaseContext context, TokenService tokenService, HashService hashService) {
             _userService = userService;
-            _context=context;
+            _context = context;
             _tokenService = tokenService;
-            _hashService=hashService;
+            _hashService = hashService;
         }
 
         // POST: api/Users/Login
         [HttpPost("Login")]
-        public async Task<ActionResult<LoginResponse>> Login(UserRequest request)
-        {
-            try
-            {
+        public async Task<ActionResult<LoginResponse>> Login(UserRequest request) {
+            try {
                 LoginResponse response = await _userService.LoginAsync(request);
 
                 return Ok(response);
-            }
-            catch (InvalidDataException ex)
-            {
+            } catch (InvalidDataException ex) {
                 return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 return NotFound(new { message = ex.Message });
             }
         }
 
         // POST: api/Users/Register
         [HttpPost("Register")]
-        public async Task<IActionResult> Register(UserRequest request)
-        {
-            try
-            {
+        public async Task<IActionResult> Register(UserRequest request) {
+            try {
                 await _userService.RegisterAsync(request);
 
                 return Ok(new { message = "User added to database!" });
-            }
-            catch (InvalidDataException ex)
-            {
+            } catch (InvalidDataException ex) {
                 return Conflict(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 return NotFound(new { message = ex.Message });
             }
         }
@@ -70,17 +55,13 @@ namespace Passwordium_api.Controllers
         // POST: api/Users/TokenRefresh
         [Authorize(AuthenticationSchemes = "NoExpiryCheck")]
         [HttpPost("TokenRefresh")]
-        public async Task<ActionResult<LoginResponse>> TokenRefresh(TokenRefreshRequest request)
-        {
-            try
-            {
+        public async Task<ActionResult<LoginResponse>> TokenRefresh(TokenRefreshRequest request) {
+            try {
                 string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
                 LoginResponse response = await _userService.TokenRefreshAsync(request, jwt);
 
                 return Ok(response);
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 return Unauthorized(new { message = ex.Message });
             }
 
@@ -89,14 +70,12 @@ namespace Passwordium_api.Controllers
         // POST: api/Users/PublicKey
         [Authorize]
         [HttpPost("PublicKey")]
-        public async Task<IActionResult> PublicKey(PublicKeyRequest request)
-        {
+        public async Task<IActionResult> PublicKey(PublicKeyRequest request) {
             string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
             int userId = _tokenService.GetUserIdFromJWT(jwt);
 
             var userReal = await _context.Users.FirstOrDefaultAsync(a => a.Id == userId);
-            if (userReal == null)
-            {
+            if (userReal == null) {
                 return NotFound(new { message = "User does not exists." });
             }
 
@@ -104,12 +83,9 @@ namespace Passwordium_api.Controllers
 
             _context.Entry(userReal).State = EntityState.Modified;
 
-            try
-            {
+            try {
                 await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
+            } catch (DbUpdateConcurrencyException) {
                 return NotFound(new { message = "Did not add public key." });
             }
 
@@ -118,23 +94,18 @@ namespace Passwordium_api.Controllers
 
         // POST: api/Users/Challenge
         [HttpPost("Challenge")]
-        public async Task<IActionResult> challenge(PublicKeyRequest response)
-        {
+        public async Task<IActionResult> challenge(PublicKeyRequest response) {
             var user = await _context.Users.FirstOrDefaultAsync(a => a.PublicKey == response.PublicKey);
-            if (user == null)
-            {
+            if (user == null) {
                 return NotFound(new { message = "User does not exists." });
             }
 
             user.ChallengeExpiresAt = DateTime.UtcNow.AddMinutes(2);
             _context.Entry(user).State = EntityState.Modified;
 
-            try
-            {
+            try {
                 await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
+            } catch (DbUpdateConcurrencyException) {
                 return NotFound(new { message = "Did not generate challenge." });
             }
 
@@ -144,23 +115,18 @@ namespace Passwordium_api.Controllers
 
         // POST: api/Users/VerifyChallenge
         [HttpPost("VerifyChallenge")]
-        public async Task<IActionResult> VerifyChallenge(VerifyChallengeRequest request)
-        {
+        public async Task<IActionResult> VerifyChallenge(VerifyChallengeRequest request) {
             var user = await _context.Users.FirstOrDefaultAsync(a => a.PublicKey == request.PublicKey);
-            if (user == null)
-            {
+            if (user == null) {
                 return NotFound(new { message = "User does not exists." });
             }
 
-            if(user.ChallengeExpiresAt < DateTime.UtcNow)
-            {
+            if (user.ChallengeExpiresAt < DateTime.UtcNow) {
                 return Unauthorized(new { message = "Challenge expired." });
             }
 
-            try
-            {
-                using (ECDsa ECDsa = ECDsa.Create())
-                {
+            try {
+                using (ECDsa ECDsa = ECDsa.Create()) {
                     byte[] publicKeyBytes = Convert.FromBase64String(request.PublicKey);
                     ECDsa.ImportSubjectPublicKeyInfo(publicKeyBytes, out _);
 
@@ -170,28 +136,22 @@ namespace Passwordium_api.Controllers
 
                     bool signatureIsValid = ECDsa.VerifyData(dataBytes, signatureBytes, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
 
-                    if (signatureIsValid)
-                    {
+                    if (signatureIsValid) {
                         string jwt = _tokenService.GenerateJwtToken(user);
                         user = _tokenService.GenerateRefreshToken(user, _context);
 
-                        LoginResponse response = new LoginResponse
-                        {
+                        LoginResponse response = new LoginResponse {
                             JWT = jwt,
-                            RefreshToken = user.RefreshToken,
-                            RefreshTokenExpiresAt = (DateTime)user.ExpiresAt
+                            RefreshToken = user.RefreshTokenHash,
+                            RefreshTokenExpiresAt = (DateTime)user.RefreshTokenExpiresAt
                         };
 
                         return Ok(response);
-                    }
-                    else
-                    {
+                    } else {
                         return Unauthorized(new { message = "Signature is not valid." });
                     }
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 return Unauthorized(new { message = ex.Message });
             }
         }

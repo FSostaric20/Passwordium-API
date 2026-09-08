@@ -1,67 +1,43 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json.Linq;
 using Passwordium_api.Data;
 using Passwordium_api.Model.Entities;
 using Passwordium_api.Model.Requests;
 using Passwordium_api.Model.Responses;
 using Passwordium_api.Services;
 
-namespace Passwordium_api.Controllers
-{
+namespace Passwordium_api.Controllers {
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class AccountsController : ControllerBase
-    {
+    public class AccountsController : ControllerBase {
         private readonly DatabaseContext _context;
-        private readonly TokenService _tokenService;
 
-        public AccountsController(DatabaseContext context, TokenService tokenService)
-        {
+        public AccountsController(DatabaseContext context, TokenService tokenService) {
             _context = context;
-            _tokenService = tokenService;
         }
 
         // GET: api/Accounts
         [HttpGet]
-        public async Task<ActionResult<List<Account>>> GetAccounts()
-        {
+        public async Task<ActionResult<List<Account>>> GetAccounts() {
             string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-            int userId = _tokenService.GetUserIdFromJWT(jwt);
+            int userId = GetCurrentUserId();
 
             var accounts = await _context.Accounts.Where(a => a.UserId == userId).ToListAsync();
 
-            if (accounts == null)
-            {
-                return NotFound(new { message = "Accounts does not exists." });
-            }
-
-            return accounts;
+            return Ok(accounts);
         }
 
         // PUT: api/Accounts
         [HttpPut]
-        public async Task<IActionResult> PutAccount(AccountRequest account)
-        {
+        public async Task<IActionResult> PutAccount(AccountRequest account) {
             string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-            int userId = _tokenService.GetUserIdFromJWT(jwt);
+            int userId = GetCurrentUserId();
 
             var accountReal = await _context.Accounts.FirstOrDefaultAsync(a => a.Id == account.Id);
-            if (accountReal == null)
-            {
-                return NotFound(new { message = "Account does not exists." });
-            }
-            if (accountReal.UserId != userId)
-            {
-                return BadRequest(new { message = "That account is not yours." });
+            if (accountReal == null) {
+                return NotFound();
             }
 
             accountReal.Name = account.Name;
@@ -71,12 +47,9 @@ namespace Passwordium_api.Controllers
 
             _context.Entry(accountReal).State = EntityState.Modified;
 
-            try
-            {
+            try {
                 await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
+            } catch (DbUpdateConcurrencyException) {
                 return NotFound(new { message = "Did not update account." });
             }
 
@@ -85,13 +58,11 @@ namespace Passwordium_api.Controllers
 
         // POST: api/Accounts
         [HttpPost]
-        public async Task<ActionResult<Account>> PostAccount(AccountRequest account)
-        {
+        public async Task<ActionResult<Account>> PostAccount(AccountRequest account) {
             string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-            int userId = _tokenService.GetUserIdFromJWT(jwt);
+            int userId = GetCurrentUserId();
 
-            Account newAccount = new Account
-            {
+            Account newAccount = new Account {
                 Name = account.Name,
                 Url = account.Url,
                 Username = account.Username,
@@ -107,19 +78,13 @@ namespace Passwordium_api.Controllers
 
         // DELETE: api/Accounts/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteAccount(int id)
-        {
+        public async Task<IActionResult> DeleteAccount(int id) {
             string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-            int userId = _tokenService.GetUserIdFromJWT(jwt);
+            int userId = GetCurrentUserId();
 
             var account = await _context.Accounts.FindAsync(id);
-            if (account == null)
-            {
-                return NotFound(new { message = "Account does not exists." });
-            }
-            if (userId != account.UserId)
-            {
-                return BadRequest(new { message = "That account is not yours." });
+            if (account == null) {
+                return NotFound();
             }
 
             _context.Accounts.Remove(account);
@@ -130,14 +95,12 @@ namespace Passwordium_api.Controllers
 
         // POST: api/Accounts/CheckPasswords
         [HttpPost("CheckPasswords")]
-        public async Task<ActionResult<List<CheckPasswordsRequest>>> CheckPasswords(List<CheckPasswordsRequest> request)
-        {
+        public async Task<ActionResult<List<CheckPasswordsRequest>>> CheckPasswords(List<CheckPasswordsRequest> request) {
             string apiURL = "https://api.pwnedpasswords.com/range/";
             HttpClient client = new HttpClient();
             List<CheckPasswordsResponse> response = new List<CheckPasswordsResponse>();
-            
-            foreach (CheckPasswordsRequest passRequest in request)
-            {
+
+            foreach (CheckPasswordsRequest passRequest in request) {
                 string prefix = passRequest.Password.Substring(0, 5);
                 string suffix = passRequest.Password.Substring(5);
 
@@ -146,13 +109,22 @@ namespace Passwordium_api.Controllers
                 string apiResponseString = await apiResponse.Content.ReadAsStringAsync();
                 bool isPasswordBreached = apiResponseString.Contains(suffix.ToUpper());
 
-                if (isPasswordBreached)
-                {
+                if (isPasswordBreached) {
                     response.Add(new CheckPasswordsResponse { Id = passRequest.Id });
                 }
             }
 
             return Ok(response);
+        }
+
+        private int GetCurrentUserId() {
+            string? userIdClaim = User.FindFirst("id")?.Value;
+
+            if (!int.TryParse(userIdClaim, out int userId)) {
+                throw new UnauthorizedAccessException("Invalid user.");
+            }
+
+            return userId;
         }
     }
 }
