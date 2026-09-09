@@ -36,29 +36,43 @@ namespace Passwordium_api.Services {
 
             await _context.SaveChangesAsync();
 
-            LoginResponse response = new LoginResponse {
+            return new LoginResponse {
                 JWT = jwt,
                 RefreshToken = refreshToken,
-                RefreshTokenExpiresAt = (DateTime)user.RefreshTokenExpiresAt
+                RefreshTokenExpiresAt = user.RefreshTokenExpiresAt.Value,
+                VaultSalt = user.VaultSalt,
+                EncryptedVaultKey = user.EncryptedVaultKey,
+                VaultKeyNonce = user.VaultKeyNonce,
+                VaultKeyTag = user.VaultKeyTag
             };
 
-            return response;
         }
 
-        public async Task RegisterAsync(UserRequest request) {
-            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        public async Task RegisterAsync(RegisterRequest request) {
+            var existingUser = await _context.Users
+                .FirstOrDefaultAsync(u =>
+                    u.Username == request.Username);
+
             if (existingUser != null) {
-                throw new InvalidDataException("A user with this username already exists.");
+                throw new InvalidDataException(
+                    "A user with this username already exists."
+                );
             }
 
             User newUser = new User {
                 Username = request.Username,
-                Password = request.Password
+                Password = request.Password,
+
+                VaultSalt = request.VaultSalt,
+                EncryptedVaultKey = request.EncryptedVaultKey,
+                VaultKeyNonce = request.VaultKeyNonce,
+                VaultKeyTag = request.VaultKeyTag
             };
 
             newUser = _hashService.HashPassword(newUser);
 
             _context.Users.Add(newUser);
+
             await _context.SaveChangesAsync();
         }
 
@@ -135,8 +149,11 @@ namespace Passwordium_api.Services {
             return new LoginResponse {
                 JWT = newJwt,
                 RefreshToken = newRefreshToken,
-                RefreshTokenExpiresAt =
-                    user.RefreshTokenExpiresAt.Value
+                RefreshTokenExpiresAt = user.RefreshTokenExpiresAt.Value,
+                VaultSalt = user.VaultSalt,
+                EncryptedVaultKey = user.EncryptedVaultKey,
+                VaultKeyNonce = user.VaultKeyNonce,
+                VaultKeyTag = user.VaultKeyTag
             };
         }
     }

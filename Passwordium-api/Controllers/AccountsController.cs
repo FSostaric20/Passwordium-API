@@ -6,6 +6,9 @@ using Passwordium_api.Model.Entities;
 using Passwordium_api.Model.Requests;
 using Passwordium_api.Model.Responses;
 using Passwordium_api.Services;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Passwordium_api.Controllers {
     [Authorize]
@@ -14,75 +17,90 @@ namespace Passwordium_api.Controllers {
     public class AccountsController : ControllerBase {
         private readonly DatabaseContext _context;
 
-        public AccountsController(DatabaseContext context, TokenService tokenService) {
+        public AccountsController(DatabaseContext context) {
             _context = context;
         }
 
         // GET: api/Accounts
         [HttpGet]
-        public async Task<ActionResult<List<Account>>> GetAccounts() {
-            string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+        public async Task<ActionResult<List<AccountResponse>>> GetAccounts() {
             int userId = GetCurrentUserId();
 
-            var accounts = await _context.Accounts.Where(a => a.UserId == userId).ToListAsync();
+            var accounts = await _context.Accounts
+                .Where(a => a.UserId == userId)
+                .Select(a => new AccountResponse {
+                    Id = a.Id,
+                    EncryptedData = a.EncryptedData,
+                    Nonce = a.Nonce,
+                    Tag = a.Tag
+                })
+                .ToListAsync();
 
             return Ok(accounts);
         }
 
-        // PUT: api/Accounts
+        // PUT:/api/Accounts
         [HttpPut]
         public async Task<IActionResult> PutAccount(AccountRequest account) {
-            string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
             int userId = GetCurrentUserId();
 
-            var accountReal = await _context.Accounts.FirstOrDefaultAsync(a => a.Id == account.Id);
-            if (accountReal == null) {
+            var existingAccount = await _context.Accounts
+                .FirstOrDefaultAsync(a =>
+                    a.Id == account.Id &&
+                    a.UserId == userId);
+
+            if (existingAccount == null) {
                 return NotFound();
             }
 
-            accountReal.Name = account.Name;
-            accountReal.Url = account.Url;
-            accountReal.Username = account.Username;
-            accountReal.Password = account.Password;
+            existingAccount.EncryptedData =
+                account.EncryptedData;
 
-            _context.Entry(accountReal).State = EntityState.Modified;
+            existingAccount.Nonce =
+                account.Nonce;
 
-            try {
-                await _context.SaveChangesAsync();
-            } catch (DbUpdateConcurrencyException) {
-                return NotFound(new { message = "Did not update account." });
-            }
+            existingAccount.Tag =
+                account.Tag;
 
-            return Ok(new { message = "Account updated!" });
+            await _context.SaveChangesAsync();
+
+            return Ok(new {
+                message = "Account updated!"
+            });
         }
 
         // POST: api/Accounts
         [HttpPost]
-        public async Task<ActionResult<Account>> PostAccount(AccountRequest account) {
-            string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+        public async Task<IActionResult> PostAccount(AccountRequest account) {
             int userId = GetCurrentUserId();
 
             Account newAccount = new Account {
-                Name = account.Name,
-                Url = account.Url,
-                Username = account.Username,
-                Password = account.Password,
+                EncryptedData = account.EncryptedData,
+                Nonce = account.Nonce,
+                Tag = account.Tag,
                 UserId = userId,
                 User = await _context.Users.FirstAsync(u => u.Id == userId)
             };
+
             _context.Accounts.Add(newAccount);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Account added to database!" });
+            return Ok(new {
+                message = "Account added to database!"
+            });
         }
 
         // DELETE: api/Accounts/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAccount(int id) {
-            string jwt = HttpContext.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
             int userId = GetCurrentUserId();
 
-            var account = await _context.Accounts.FindAsync(id);
+            var account = await _context.Accounts
+                .FirstOrDefaultAsync(a =>
+                    a.Id == id &&
+                    a.UserId == userId
+                );
+
             if (account == null) {
                 return NotFound();
             }
@@ -90,31 +108,9 @@ namespace Passwordium_api.Controllers {
             _context.Accounts.Remove(account);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Account deleted from database!" });
-        }
-
-        // POST: api/Accounts/CheckPasswords
-        [HttpPost("CheckPasswords")]
-        public async Task<ActionResult<List<CheckPasswordsRequest>>> CheckPasswords(List<CheckPasswordsRequest> request) {
-            string apiURL = "https://api.pwnedpasswords.com/range/";
-            HttpClient client = new HttpClient();
-            List<CheckPasswordsResponse> response = new List<CheckPasswordsResponse>();
-
-            foreach (CheckPasswordsRequest passRequest in request) {
-                string prefix = passRequest.Password.Substring(0, 5);
-                string suffix = passRequest.Password.Substring(5);
-
-
-                HttpResponseMessage apiResponse = await client.GetAsync(apiURL + prefix);
-                string apiResponseString = await apiResponse.Content.ReadAsStringAsync();
-                bool isPasswordBreached = apiResponseString.Contains(suffix.ToUpper());
-
-                if (isPasswordBreached) {
-                    response.Add(new CheckPasswordsResponse { Id = passRequest.Id });
-                }
-            }
-
-            return Ok(response);
+            return Ok(new {
+                message = "Account deleted from database!"
+            });
         }
 
         private int GetCurrentUserId() {

@@ -1,10 +1,8 @@
-﻿namespace Passwordium_api.Model.Entities {
-    public class Account {
+﻿namespace Passwordium_api.Model.Responses {
+    public class AccountResponse {
         public int Id { get; set; }
         public required string EncryptedData { get; set; }
         public required string Nonce { get; set; }
         public required string Tag { get; set; }
-        public required int UserId { get; set; }
-        public virtual required User User { get; set; }
     }
 }

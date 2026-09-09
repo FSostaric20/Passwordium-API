@@ -53,9 +53,7 @@ namespace Passwordium_api.Services {
             }
         }
 
-        private byte[] HashPassword(
-            string password,
-            byte[] salt) {
+        private byte[] HashPassword(string password, byte[] salt) {
             using var argon2 =
                 new Argon2id(
                     Encoding.UTF8.GetBytes(password)
