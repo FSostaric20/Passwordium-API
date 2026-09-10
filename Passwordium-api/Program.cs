@@ -43,7 +43,7 @@ if (databaseKey == null) {
 
 string? jwtKey =
     Environment.GetEnvironmentVariable("JWT:JWT-Key")
-    ?? builder.Configuration["JWT:Key"];
+    ?? builder.Configuration["JWT:JWT-Key"];
 
 string? jwtIssuer =
     builder.Configuration["JWT:Issuer"];
