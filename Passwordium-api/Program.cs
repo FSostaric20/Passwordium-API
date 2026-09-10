@@ -42,7 +42,7 @@ if (databaseKey == null) {
 #region JWT Key
 
 string? jwtKey =
-    Environment.GetEnvironmentVariable("JWT-Key")
+    Environment.GetEnvironmentVariable("JWT:JWT-Key")
     ?? builder.Configuration["JWT:Key"];
 
 string? jwtIssuer =
@@ -118,6 +118,14 @@ builder.Services
 #endregion
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider
+        .GetRequiredService<DatabaseContext>();
+
+    db.Database.Migrate();
+}
 
 app.UseSwagger();
 app.UseSwaggerUI();
