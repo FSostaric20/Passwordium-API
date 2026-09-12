@@ -203,5 +203,37 @@ namespace Passwordium_api.Controllers {
                 });
             }
         }
+
+        // POST: api/Users/Logout
+        [Authorize]
+        [HttpPost("Logout")]
+        public async Task<IActionResult> Logout() {
+            int userId = GetCurrentUserId();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null)
+                return NotFound();
+
+            user.RefreshTokenHash = null;
+            user.RefreshTokenExpiresAt = null;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new {
+                message = "Logout successful."
+            });
+        }
+
+        private int GetCurrentUserId() {
+            string? userIdClaim = User.FindFirst("id")?.Value;
+
+            if (!int.TryParse(userIdClaim, out int userId)) {
+                throw new UnauthorizedAccessException("Invalid user.");
+            }
+
+            return userId;
+        }
     }
 }
